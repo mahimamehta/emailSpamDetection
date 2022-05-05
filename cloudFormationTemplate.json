@@ -1,0 +1,200 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "AWS CloudFormation Template",
+
+  "Resources" : {
+    "myemailbuckets" : {
+      "Type" : "AWS::S3::Bucket",
+      "Properties" : {
+        "AccessControl" : "PublicRead"
+      }
+    },
+    "BucketPolicy": {
+        "Type": "AWS::S3::BucketPolicy",
+        "Properties": {
+            "PolicyDocument": {
+                "Id": "MyPolicyforMemailBucket",
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "PublicReadForGetBucketObjects",
+                        "Effect": "Allow",
+                        "Principal": "*",
+                        "Action": "s3:GetObject",
+                        "Resource": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:aws:s3:::",
+                                    {
+                                        "Ref": "myemailbuckets"
+                                    },
+                                    "/*"
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Bucket": {
+                "Ref": "myemailbuckets"
+            }
+        }
+    },
+    "sagemakerbucketstore" : {
+      "Type" : "AWS::S3::Bucket",
+      "Properties" : {
+        "AccessControl" : "PublicRead",
+        "WebsiteConfiguration" : {
+          "IndexDocument" : "index.html"
+         }
+      }
+    },
+    "Bucket2Policy": {
+        "Type": "AWS::S3::BucketPolicy",
+        "Properties": {
+            "PolicyDocument": {
+                "Id": "MyPolicyforSageMakerBucket",
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Sid": "PublicReadForGetBucketObjects",
+                        "Effect": "Allow",
+                        "Principal": "*",
+                        "Action": "s3:GetObject",
+                        "Resource": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:aws:s3:::",
+                                    {
+                                        "Ref": "sagemakerbucketstore"
+                                    },
+                                    "/*"
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Bucket": {
+                "Ref": "sagemakerbucketstore"
+            }
+        }
+    },
+    "ExecutionRoleLambda": {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Service": [
+                    "lambda.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Path": "/",
+              "Policies": [
+                {
+                  "PolicyName": "root2",
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Action": "*",
+                        "Resource": "*"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+        },
+    "detectEmail": {
+        "Type": "AWS::Lambda::Function",
+        "Properties": {
+            "Handler": "detectEmail.lambda_handler",
+            "Role" : {
+                "Fn::GetAtt" : [
+                    "ExecutionRoleLambda", "Arn" 
+                ]
+            },
+            "Code": {
+                "ZipFile": "def my_handler(event, context):\n  message = \"Hello from Lambda!\"\n  return message\n"
+        },
+            "Runtime": "python3.9",
+            "Timeout": 25,
+            "TracingConfig": {
+                "Mode": "Active"
+            }
+        }
+    },
+    "emailSpamDetection": {
+        "Type": "AWS::SageMaker::NotebookInstance",
+        "Properties": {
+         "InstanceType": "ml.t2.medium",
+         "RoleArn": { "Fn::GetAtt" : [ "ExecutionRole", "Arn" ] }
+            }
+          },
+    "ExecutionRole": {
+        "Type": "AWS::IAM::Role",
+        "Properties": {
+          "AssumeRolePolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Principal": {
+                  "Service": [
+                    "sagemaker.amazonaws.com"
+                      ]
+                    },
+                    "Action": [
+                      "sts:AssumeRole"
+                    ]
+                  }
+                ]
+              },
+              "Path": "/",
+              "Policies": [
+                {
+                  "PolicyName": "root",
+                  "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                      {
+                        "Effect": "Allow",
+                        "Action": "*",
+                        "Resource": "*"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+        }
+    },
+  "Outputs" : {
+    "S3Bucket1SecureURL" : {
+      "Value" : { "Fn::Join" : [ "", [ "https://", { "Fn::GetAtt" : [ "myemailbuckets", "DomainName" ] } ] ] },
+      "Description" : "Name of S3 bucket to hold email content"
+    },
+    "S3Bucket2SecureURL" : {
+        "Value" : { "Fn::Join" : [ "", [ "https://", { "Fn::GetAtt" : [ "sagemakerbucketstore", "DomainName" ] } ] ] },
+        "Description" : "Name of S3 bucket to hold email content"
+      },
+      "NotebookInstanceId": {
+        "Value": { "Ref" : "emailSpamDetection" }
+    }
+  }
+}
